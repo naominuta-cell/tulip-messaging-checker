@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tulip Messaging Consistency Checker</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --color-bg: #ffffff;
+      --color-bg-secondary: #f7f7f5;
+      --color-bg-tertiary: #f0efea;
+      --color-text: #1a1a18;
+      --color-text-secondary: #6b6b66;
+      --color-text-tertiary: #9b9b96;
+      --color-border: rgba(0,0,0,0.12);
+      --color-border-secondary: rgba(0,0,0,0.2);
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      font-family: var(--font);
+      background: var(--color-bg-tertiary);
+      color: var(--color-text);
+      min-height: 100vh;
+      padding: 2rem 1rem;
+    }
+
+    #root {
+      max-width: 780px;
+      margin: 0 auto;
+      background: var(--color-bg);
+      border-radius: var(--radius-lg);
+      border: 0.5px solid var(--color-border);
+      padding: 2rem;
+    }
+
+    h1 {
+      font-size: 18px;
+      font-weight: 500;
+      margin-bottom: 4px;
+      color: var(--color-text);
+    }
+
+    .subtitle {
+      font-size: 13px;
+      color: var(--color-text-secondary);
+      margin-bottom: 1.5rem;
+    }
+
+    button {
+      font-family: var(--font);
+      font-size: 13px;
+      padding: 7px 14px;
+      border-radius: var(--radius-md);
+      border: 0.5px solid var(--color-border-secondary);
+      background: transparent;
+      color: var(--color-text);
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    button:hover { background: var(--color-bg-secondary); }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    button.active { background: var(--color-bg-secondary); font-weight: 500; }
+    button.primary { background: #1a1a18; color: #fff; border-color: #1a1a18; font-size: 14px; padding: 9px 18px; }
+    button.primary:hover { background: #333; }
+    button.primary:disabled { background: #999; border-color: #999; }
+
+    input, select, textarea {
+      font-family: var(--font);
+      font-size: 13px;
+      padding: 8px 10px;
+      border-radius: var(--radius-md);
+      border: 0.5px solid var(--color-border-secondary);
+      background: var(--color-bg);
+      color: var(--color-text);
+      width: 100%;
+      outline: none;
+    }
+    input:focus, select:focus, textarea:focus { border-color: #888; }
+    textarea { resize: vertical; line-height: 1.6; }
+
+    label { font-size: 12px; color: var(--color-text-secondary); display: block; margin-bottom: 4px; }
+
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .stack { display: flex; flex-direction: column; gap: 12px; }
+    .row { display: flex; gap: 8px; align-items: center; }
+
+    .card {
+      background: var(--color-bg-secondary);
+      border-radius: var(--radius-lg);
+      border: 0.5px solid var(--color-border);
+      padding: 1rem 1.25rem;
+    }
+
+    .score-card {
+      display: grid;
+      grid-template-columns: 72px 1fr;
+      gap: 16px;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .score-num { font-size: 38px; font-weight: 500; line-height: 1; }
+    .score-label { font-size: 11px; color: var(--color-text-secondary); margin-top: 2px; }
+
+    .badge {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: var(--radius-md);
+      display: inline-block;
+      white-space: nowrap;
+    }
+
+    .section-row {
+      border: 0.5px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      margin-bottom: 8px;
+    }
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      cursor: pointer;
+      background: var(--color-bg-secondary);
+    }
+    .section-body { padding: 14px; border-top: 0.5px solid var(--color-border); }
+
+    .issue-row {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      margin-bottom: 6px;
+      padding: 8px 10px;
+      background: var(--color-bg-secondary);
+      border-radius: var(--radius-md);
+    }
+
+    .table-header {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      background: var(--color-bg-secondary);
+      padding: 8px 12px;
+      border-bottom: 0.5px solid var(--color-border);
+    }
+    .table-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      padding: 12px;
+    }
+    .table-row + .table-row { border-top: 0.5px solid var(--color-border); }
+
+    .col-header { font-size: 11px; color: var(--color-text-secondary); font-weight: 500; }
+
+    .divider { border: none; border-top: 0.5px solid var(--color-border); margin: 1.5rem 0; }
+
+    .upload-zone {
+      border: 0.5px dashed var(--color-border-secondary);
+      border-radius: var(--radius-lg);
+      padding: 2rem;
+      text-align: center;
+      cursor: pointer;
+      background: var(--color-bg-secondary);
+    }
+
+    .strengths {
+      padding: 1rem 1.25rem;
+      background: #E1F5EE;
+      border-radius: var(--radius-lg);
+      border: 0.5px solid #9FE1CB;
+    }
+    .strengths ul { padding-left: 16px; }
+    .strengths li { font-size: 13px; color: #0F6E56; margin-bottom: 4px; line-height: 1.5; }
+
+    .error-box {
+      padding: 10px 14px;
+      background: #FCEBEB;
+      border: 0.5px solid #F7C1C1;
+      border-radius: var(--radius-md);
+      margin-bottom: 1rem;
+      font-size: 13px;
+      color: #A32D2D;
+    }
+
+    .rewrite-box {
+      font-size: 13px;
+      line-height: 1.7;
+      color: #085041;
+      padding: 10px 12px;
+      background: #E1F5EE;
+      border-radius: var(--radius-md);
+      border: 0.5px solid #9FE1CB;
+    }
+
+    .hint { font-size: 12px; color: var(--color-text-secondary); margin-top: 6px; }
+
+    @media (max-width: 560px) {
+      .grid-2 { grid-template-columns: 1fr; }
+      .table-header, .table-row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useRef } = React;
+
+const ASSET_TYPES = ["Campaign brief","Email / demand gen","Sales enablement","Event content","Website / landing page"];
+const PERSONAS = ["VP of Operations","Digital Transformation Leader","IT Leader","Process Owner","General / All personas"];
+
+const ISSUE_TYPES = {
+  pillar:      { label: "Pillar alignment",      color: "#534AB7", bg: "#EEEDFE" },
+  persona:     { label: "Persona mismatch",      color: "#0F6E56", bg: "#E1F5EE" },
+  terminology: { label: "Outdated terminology",  color: "#993C1D", bg: "#FAECE7" },
+  framing:     { label: "Feature vs. outcome",   color: "#185FA5", bg: "#E6F1FB" },
+  platform:    { label: "Platform connection",   color: "#BA7517", bg: "#FAEEDA" },
+  consistency: { label: "Internal consistency",  color: "#993556", bg: "#FBEAF0" },
+};
+
+const SYSTEM_PROMPT = `You are a product marketing messaging expert for Tulip, a manufacturing operations platform. Evaluate content against Tulip's approved FY27 messaging framework.
+
+Core positioning: Tulip is the Operations-First AI platform combining composable operations software with human-first AI.
+
+Approved FY27 pillars:
+1. Contextualized AI — Human-First AI working WITH frontline workers
+2. Composability + AI — Build and adapt operations apps without engineering dependency
+3. Enterprise Scalability — Deploy across sites, scale with confidence
+
+Approved framework: Compose → Orchestrate & Adapt → Evolve (NOT "Compose → Augment → Optimize")
+
+Approved terms: "Human-First AI", "Composable operations", "Operations-First AI platform", "Frontline workers", "Engineering independence", "Orchestrate & Adapt", "Evolve"
+
+Banned terms: "no-code", "drag-and-drop", "shop floor digitization", "Augment" as framework step, "Optimize" as framework step
+
+Persona messages:
+- VP of Operations: Operational agility, cost of quality reduction, faster time-to-value
+- Digital Transformation Leader: Composable architecture, AI readiness, legacy modernization
+- IT Leader: Enterprise security, integration flexibility, engineering independence
+- Process Owner: Empowerment to build and adapt without waiting for IT
+
+Always lead with business outcomes, not features.`;
+
+const callClaude = async (apiKey, messages, maxTokens = 1500) => {
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-calls": "true" },
+    body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: maxTokens, system: SYSTEM_PROMPT, messages })
+  });
+  const d = await res.json();
+  if (d.error) throw new Error(d.error.message);
+  const text = d.content?.[0]?.text || "";
+  return JSON.parse(text.replace(/```json\n?/g,"").replace(/```\n?/g,"").trim());
+};
+
+const LAUNCH_DEF = {
+  featureName: "", campaign: "", positioning: "", oneLine: "",
+  elevator: "", pillars: "", personaMessages: "", painPoints: "", differentiation: ""
+};
+
+function App() {
+  const [apiKey, setApiKey] = useState(localStorage.getItem("tulip_api_key") || "");
+  const [apiKeySaved, setApiKeySaved] = useState(!!localStorage.getItem("tulip_api_key"));
+  const [tab, setTab] = useState("asset");
+  const [inputMode, setInputMode] = useState("text");
+  const [draft, setDraft] = useState("");
+  const [lpCopy, setLpCopy] = useState("");
+  const [pdfFile, setPdfFile] = useState(null);
+  const [pdfB64, setPdfB64] = useState(null);
+  const [assetType, setAssetType] = useState(ASSET_TYPES[0]);
+  const [persona, setPersona] = useState(PERSONAS[0]);
+  const [launch, setLaunch] = useState(LAUNCH_DEF);
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [open, setOpen] = useState({});
+  const fileRef = useRef();
+
+  const saveKey = () => {
+    localStorage.setItem("tulip_api_key", apiKey);
+    setApiKeySaved(true);
+  };
+
+  const toggle = i => setOpen(p => ({ ...p, [i]: !p[i] }));
+
+  const handleFile = e => {
+    const f = e.target.files?.[0]; if (!f) return;
+    setPdfFile(f); setResult(null);
+    const r = new FileReader();
+    r.onload = () => setPdfB64(r.result.split(",")[1]);
+    r.readAsDataURL(f);
+  };
+
+  const run = async () => {
+    if (!apiKey) { setError("Please enter your Anthropic API key above."); return; }
+    setLoading(true); setError(null); setResult(null); setOpen({});
+    try {
+      let msgs, r;
+      if (tab === "launch") {
+        const c = `Feature: ${launch.featureName}\nCampaign: ${launch.campaign}\nPositioning: ${launch.positioning}\nOne-line: ${launch.oneLine}\nElevator: ${launch.elevator}\nPillars:\n${launch.pillars}\nPersonas:\n${launch.personaMessages}\nPain points:\n${launch.painPoints}\nDiff:\n${launch.differentiation}`;
+        msgs = [{ role:"user", content:`${c}\n\nEvaluate across 6 dimensions: pillar, persona, terminology, framing, platform, consistency. Return ONLY valid JSON:\n{"overallScore":75,"summary":"text","platformPillar":"pillar name","issues":[{"issueType":"terminology","draftText":"phrase","approvedText":"better phrase","explanation":"reason"}],"strengths":["strength"]}` }];
+        r = await callClaude(apiKey, msgs, 1500);
+      } else if (inputMode === "landing") {
+        msgs = [{ role:"user", content:`Persona: ${persona}\n\nLanding page copy:\n${lpCopy}\n\nEvaluate section by section. Return ONLY valid JSON:\n{"overallScore":75,"summary":"text","platformPillar":"pillar","sections":[{"sectionName":"name","currentCopy":"copy","hasIssues":true,"issues":[{"issueType":"terminology","draftText":"phrase","explanation":"reason"}],"suggestedRewrite":"improved copy"}],"strengths":["strength"]}` }];
+        r = await callClaude(apiKey, msgs, 2500);
+      } else if (inputMode === "pdf") {
+        msgs = [{ role:"user", content:[
+          { type:"document", source:{ type:"base64", media_type:"application/pdf", data: pdfB64 } },
+          { type:"text", text:`Asset type: ${assetType}\nPersona: ${persona}\n\nReturn ONLY valid JSON:\n{"overallScore":75,"summary":"text","issues":[{"issueType":"terminology","draftText":"phrase","approvedText":"better","explanation":"reason"}],"strengths":["strength"]}` }
+        ]}];
+        r = await callClaude(apiKey, msgs, 1500);
+      } else {
+        msgs = [{ role:"user", content:`Asset type: ${assetType}\nPersona: ${persona}\n\nDraft:\n"${draft}"\n\nReturn ONLY valid JSON:\n{"overallScore":75,"summary":"text","issues":[{"issueType":"terminology","draftText":"phrase","approvedText":"better","explanation":"reason"}],"strengths":["strength"]}` }];
+        r = await callClaude(apiKey, msgs, 1500);
+      }
+      setResult(r);
+    } catch(e) { setError("Error: " + e.message); }
+    setLoading(false);
+  };
+
+  const canRun = tab==="launch" ? !!(launch.featureName && launch.positioning)
+    : inputMode==="pdf" ? !!pdfB64
+    : inputMode==="landing" ? lpCopy.trim().length > 50
+    : draft.trim().length > 10;
+
+  const scoreColor = !result ? "#888" : result.overallScore>=75 ? "#0F6E56" : result.overallScore>=50 ? "#BA7517" : "#A32D2D";
+
+  const lf = (k, label, rows=2) => (
+    <div>
+      <label>{label}</label>
+      <textarea rows={rows} value={launch[k]} onChange={e=>setLaunch(p=>({...p,[k]:e.target.value}))} />
+    </div>
+  );
+
+  return (
+    <div>
+      <h1>Tulip Messaging Consistency Checker</h1>
+      <p className="subtitle">Evaluate assets against Tulip's approved FY27 messaging framework.</p>
+
+      <div className="card" style={{ marginBottom: "1.5rem" }}>
+        <label>Anthropic API key</label>
+        <div className="row">
+          <input type="password" value={apiKey} onChange={e=>{ setApiKey(e.target.value); setApiKeySaved(false); }} placeholder="sk-ant-..." style={{ flex:1 }} />
+          <button onClick={saveKey}>Save</button>
+        </div>
+        {apiKeySaved && <p className="hint">Key saved to browser. Get yours at console.anthropic.com</p>}
+        {!apiKeySaved && <p className="hint">Your API key is stored locally in your browser and never sent anywhere except Anthropic.</p>}
+      </div>
+
+      <hr className="divider" />
+
+      <div className="row" style={{ marginBottom:"1.5rem" }}>
+        {[["asset","Asset checker"],["launch","Launch messaging"]].map(([v,l])=>(
+          <button key={v} className={tab===v?"active":""} onClick={()=>{ setTab(v); setResult(null); setError(null); }}>{l}</button>
+        ))}
+      </div>
+
+      {tab==="asset" && (
+        <div className="stack">
+          <div className="row">
+            {[["text","Paste text"],["pdf","Upload PDF"],["landing","Landing page"]].map(([m,l])=>(
+              <button key={m} className={inputMode===m?"active":""} onClick={()=>{ setInputMode(m); setResult(null); setError(null); }}>{l}</button>
+            ))}
+          </div>
+
+          {inputMode!=="landing" && (
+            <div className="grid-2">
+              <div><label>Asset type</label><select value={assetType} onChange={e=>setAssetType(e.target.value)}>{ASSET_TYPES.map(t=><option key={t}>{t}</option>)}</select></div>
+              <div><label>Target persona</label><select value={persona} onChange={e=>setPersona(e.target.value)}>{PERSONAS.map(p=><option key={p}>{p}</option>)}</select></div>
+            </div>
+          )}
+
+          {inputMode==="text" && (
+            <div><label>Draft asset</label><textarea value={draft} onChange={e=>{ setDraft(e.target.value); setResult(null); }} rows={7} placeholder="Paste your draft asset here..." /></div>
+          )}
+
+          {inputMode==="pdf" && (
+            <div>
+              <label>Upload PDF</label>
+              <div className="upload-zone" onClick={()=>fileRef.current.click()}>
+                {pdfFile
+                  ? <><div style={{fontSize:14,fontWeight:500,marginBottom:4}}>{pdfFile.name}</div><div style={{fontSize:12,color:"var(--color-text-secondary)"}}>{(pdfFile.size/1024).toFixed(0)} KB — click to replace</div></>
+                  : <><div style={{fontSize:14,color:"var(--color-text-secondary)",marginBottom:4}}>Click to upload a PDF</div><div style={{fontSize:12,color:"var(--color-text-tertiary)"}}>Supports decks and docs exported as PDF</div></>}
+              </div>
+              <input ref={fileRef} type="file" accept="application/pdf" onChange={handleFile} style={{display:"none"}} />
+            </div>
+          )}
+
+          {inputMode==="landing" && (
+            <div className="stack">
+              <div><label>Target persona</label><select value={persona} onChange={e=>setPersona(e.target.value)} style={{maxWidth:320}}>{PERSONAS.map(p=><option key={p}>{p}</option>)}</select></div>
+              <div>
+                <label>Paste landing page copy</label>
+                <textarea value={lpCopy} onChange={e=>{ setLpCopy(e.target.value); setResult(null); }} rows={10} placeholder="Paste all copy from the landing page here. Select all (Cmd+A), copy, paste." />
+                <p className="hint">The tool evaluates copy section by section and suggests rewrites for each.</p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab==="launch" && (
+        <div className="stack">
+          <p style={{fontSize:13,color:"var(--color-text-secondary)"}}>Validate new feature launch messaging against the FY27 platform narrative before briefing content, sales, or events.</p>
+          <div className="grid-2">
+            <div><label>Feature name</label><input value={launch.featureName} onChange={e=>setLaunch(p=>({...p,featureName:e.target.value}))} placeholder="e.g. Factory Playback" /></div>
+            <div><label>Product campaign</label><input value={launch.campaign} onChange={e=>setLaunch(p=>({...p,campaign:e.target.value}))} placeholder="e.g. Contextualized AI" /></div>
+          </div>
+          {lf("positioning","Positioning statement",2)}
+          {lf("oneLine","One-line summary",1)}
+          {lf("elevator","Elevator pitch",4)}
+          {lf("pillars","Messaging pillars (one per line)",3)}
+          {lf("personaMessages","Persona-specific messages",4)}
+          {lf("painPoints","Pain points addressed",3)}
+          {lf("differentiation","Tulip differentiation",3)}
+        </div>
+      )}
+
+      <div style={{marginTop:"1.5rem",marginBottom:"1.5rem"}}>
+        <button className="primary" onClick={run} disabled={loading||!canRun}>
+          {loading ? "Checking..." : tab==="launch" ? "Validate launch messaging" : inputMode==="landing" ? "Review landing page" : "Check messaging"}
+        </button>
+      </div>
+
+      {error && <div className="error-box">{error}</div>}
+
+      {result && (
+        <div>
+          <div className="card score-card">
+            <div style={{textAlign:"center"}}>
+              <div className="score-num" style={{color:scoreColor}}>{result.overallScore}</div>
+              <div className="score-label">/ 100</div>
+            </div>
+            <div>
+              {result.platformPillar && <div style={{marginBottom:8}}><span className="badge" style={{background:"#FAEEDA",color:"#BA7517"}}>Pillar: {result.platformPillar}</span></div>}
+              <p style={{fontSize:14,lineHeight:1.6}}>{result.summary}</p>
+            </div>
+          </div>
+
+          {Array.isArray(result.sections) && result.sections.length>0 && (
+            <div style={{marginBottom:"1.5rem"}}>
+              <p style={{fontSize:13,fontWeight:500,marginBottom:10}}>Section-by-section review</p>
+              {result.sections.map((sec,i)=>(
+                <div className="section-row" key={i}>
+                  <div className="section-header" onClick={()=>toggle(i)}>
+                    <div className="row">
+                      <span style={{fontSize:13,fontWeight:500}}>{sec.sectionName||`Section ${i+1}`}</span>
+                      {sec.hasIssues
+                        ? <span className="badge" style={{background:"#FAECE7",color:"#993C1D"}}>{(sec.issues||[]).length} issue{(sec.issues||[]).length!==1?"s":""}</span>
+                        : <span className="badge" style={{background:"#E1F5EE",color:"#0F6E56"}}>looks good</span>}
+                    </div>
+                    <span style={{fontSize:16,color:"var(--color-text-secondary)"}}>{open[i]?"−":"+"}</span>
+                  </div>
+                  {open[i] && (
+                    <div className="section-body">
+                      {sec.currentCopy && (
+                        <div style={{marginBottom:12}}>
+                          <p style={{fontSize:11,fontWeight:500,color:"var(--color-text-secondary)",marginBottom:6,letterSpacing:"0.04em"}}>CURRENT COPY</p>
+                          <p style={{fontSize:13,fontStyle:"italic",lineHeight:1.6}}>"{sec.currentCopy}"</p>
+                        </div>
+                      )}
+                      {(sec.issues||[]).length>0 && (
+                        <div style={{marginBottom:12}}>
+                          <p style={{fontSize:11,fontWeight:500,color:"var(--color-text-secondary)",marginBottom:6,letterSpacing:"0.04em"}}>FLAGGED ISSUES</p>
+                          {(sec.issues||[]).map((iss,j)=>{
+                            const type = ISSUE_TYPES[iss.issueType]||ISSUE_TYPES.terminology;
+                            return (
+                              <div className="issue-row" key={j}>
+                                <span className="badge" style={{background:type.bg,color:type.color,flexShrink:0}}>{type.label}</span>
+                                <p style={{fontSize:13,lineHeight:1.5}}><em>"{iss.draftText}"</em> <span style={{color:"var(--color-text-secondary)"}}>— {iss.explanation}</span></p>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {sec.suggestedRewrite && (
+                        <div>
+                          <p style={{fontSize:11,fontWeight:500,color:"#085041",marginBottom:6,letterSpacing:"0.04em"}}>SUGGESTED REWRITE</p>
+                          <div className="rewrite-box">{sec.suggestedRewrite}</div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {Array.isArray(result.issues) && result.issues.length>0 && !result.sections && (
+            <div style={{marginBottom:"1.5rem",border:"0.5px solid var(--color-border)",borderRadius:"var(--radius-lg)",overflow:"hidden"}}>
+              <div className="table-header">
+                <span className="col-header">DRAFT LANGUAGE</span>
+                <span className="col-header">APPROVED MESSAGING</span>
+                <span className="col-header">TYPE</span>
+              </div>
+              {result.issues.map((iss,i)=>{
+                const type = ISSUE_TYPES[iss.issueType]||ISSUE_TYPES.terminology;
+                return (
+                  <div className="table-row" key={i}>
+                    <div style={{paddingRight:12}}>
+                      <p style={{fontSize:13,fontStyle:"italic",marginBottom:4}}>"{iss.draftText}"</p>
+                      <p style={{fontSize:12,color:"var(--color-text-secondary)"}}>{iss.explanation}</p>
+                    </div>
+                    <div style={{paddingRight:12}}><p style={{fontSize:13}}>{iss.approvedText}</p></div>
+                    <div><span className="badge" style={{background:type.bg,color:type.color}}>{type.label}</span></div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {Array.isArray(result.strengths) && result.strengths.length>0 && (
+            <div className="strengths">
+              <p style={{fontSize:12,fontWeight:500,color:"#085041",marginBottom:8}}>What's working</p>
+              <ul>{result.strengths.map((s,i)=><li key={i}>{s}</li>)}</ul>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
